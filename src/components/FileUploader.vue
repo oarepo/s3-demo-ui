@@ -2,7 +2,7 @@
 invenio-multipart-uploader.uploader.bg-grey-2(
   :factory="getUrl"
   ref="uploader"
-  :headers="[ { name: 'Access-Control-Allow-Origin', value: 'http://localhost:8081'} ]"
+  :headers="[ { name: 'Access-Control-Allow-Origin', value: 'http://localhost:8080'} ]"
   flat
   square
   text-color="grey-9"
