@@ -1,6 +1,7 @@
 import { QUploaderBase } from 'quasar'
 import { Component } from 'vue-property-decorator'
 import { mixins } from 'vue-class-component'
+import PromisePool from 'es6-promise-pool'
 
 function getFn (prop) {
   return typeof prop === 'function'
@@ -17,6 +18,11 @@ export default @Component({
     partSize: {
       type: [Function, Number],
       default: 10485760 // 10 MB
+    },
+    maxConcurrency: {
+      // How many upload promises is allowed to run in parallel
+      type: [Function, Number],
+      default: 5
     },
     maxParts: {
       type: [Function, Number],
@@ -39,7 +45,8 @@ class InvenioMultipartUploader extends mixins(QUploaderBase) {
       headers: getFn(this.headers),
       batch: getFn(this.batch),
       partSize: getFn(this.partSize),
-      maxParts: getFn(this.maxParts)
+      maxParts: getFn(this.maxParts),
+      maxConcurrency: getFn(this.maxConcurrency)
     }
   }
 
@@ -205,7 +212,7 @@ class InvenioMultipartUploader extends mixins(QUploaderBase) {
 
   __uploadParts (factory, file, multipartUpload) {
     // eslint-disable-next-line camelcase
-    const { part_size, last_part_number, last_part_size } = multipartUpload
+    const { last_part_number } = multipartUpload
     // eslint-disable-next-line camelcase
     this.chunkQueue = new Array(last_part_number + 1)
       .fill()
@@ -213,16 +220,40 @@ class InvenioMultipartUploader extends mixins(QUploaderBase) {
       .reverse()
     this.uploadedChunks = []
 
+    const uploadWorkerPromise = (chunkId) => {
+      return new Promise((resolve, reject) => {
+        // this.__uploadPart(
+        //   factory,
+        //   file,
+        //   multipartUpload.links.self,
+        //   part_size,
+        //   last_part_size,
+        //   last_part_number
+        // )
+      })
+    }
+
+    const uploadWorkerProducer = () => {
+      const chunkId = this.chunkQueue.pop()
+      console.log('creating ', chunkId)
+      return uploadWorkerPromise(chunkId)
+    }
+
+    const concurrency = this.__getProp(factory, 'maxConcurrency', file)
+    // eslint-disable-next-line camelcase
+    const limit = (last_part_number + 1) > concurrency ? concurrency : (last_part_number + 1)
+    const pool = new PromisePool(uploadWorkerProducer, limit)
+    const poolPromise = pool.start()
+
+    poolPromise.then(() => {
+      console.log('All parts uploaded')
+    }, (error) => {
+      console.log('Some part upload failed: ' + error.message)
+    })
+
     // eslint-disable-next-line camelcase
     for (let i = 0; i < last_part_number + 1; i++) {
-      this.__uploadPart(
-        factory,
-        file,
-        multipartUpload.links.self,
-        part_size,
-        last_part_size,
-        last_part_number
-      )
+
     }
   }
 
